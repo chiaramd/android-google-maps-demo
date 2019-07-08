@@ -1,14 +1,24 @@
 package com.example.mapdemo;
 
 import android.Manifest;
+import android.app.AlertDialog;
 import android.app.Dialog;
+import android.content.DialogInterface;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.text.TextUtils;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.animation.BounceInterpolator;
+import android.widget.EditText;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -25,7 +35,11 @@ import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.BitmapDescriptor;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.Marker;
+import com.google.android.gms.maps.model.MarkerOptions;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 
@@ -35,7 +49,7 @@ import permissions.dispatcher.RuntimePermissions;
 import static com.google.android.gms.location.LocationServices.getFusedLocationProviderClient;
 
 @RuntimePermissions
-public class MapDemoActivity extends AppCompatActivity {
+public class MapDemoActivity extends AppCompatActivity implements GoogleMap.OnMapLongClickListener {
 
     private SupportMapFragment mapFragment;
     private GoogleMap map;
@@ -73,6 +87,7 @@ public class MapDemoActivity extends AppCompatActivity {
                 @Override
                 public void onMapReady(GoogleMap map) {
                     loadMap(map);
+                    map.setInfoWindowAdapter(new CustomWindowAdapter(getLayoutInflater()));
                 }
             });
         } else {
@@ -84,6 +99,8 @@ public class MapDemoActivity extends AppCompatActivity {
     protected void loadMap(GoogleMap googleMap) {
         map = googleMap;
         if (map != null) {
+            // Attach long click listener to the map
+            map.setOnMapLongClickListener(this);
             // Map is ready
             Toast.makeText(this, "Map Fragment was loaded properly!", Toast.LENGTH_SHORT).show();
             MapDemoActivityPermissionsDispatcher.getMyLocationWithPermissionCheck(this);
@@ -92,6 +109,7 @@ public class MapDemoActivity extends AppCompatActivity {
             Toast.makeText(this, "Error - Map was null!!", Toast.LENGTH_SHORT).show();
         }
     }
+
 
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
@@ -125,7 +143,7 @@ public class MapDemoActivity extends AppCompatActivity {
 
     /*
      * Called when the Activity becomes visible.
-    */
+     */
     @Override
     protected void onStart() {
         super.onStart();
@@ -133,7 +151,7 @@ public class MapDemoActivity extends AppCompatActivity {
 
     /*
      * Called when the Activity is no longer visible.
-	 */
+     */
     @Override
     protected void onStop() {
         super.onStop();
@@ -195,6 +213,16 @@ public class MapDemoActivity extends AppCompatActivity {
         SettingsClient settingsClient = LocationServices.getSettingsClient(this);
         settingsClient.checkLocationSettings(locationSettingsRequest);
         //noinspection MissingPermission
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
         getFusedLocationProviderClient(this).requestLocationUpdates(mLocationRequest, new LocationCallback() {
                     @Override
                     public void onLocationResult(LocationResult locationResult) {
@@ -224,6 +252,56 @@ public class MapDemoActivity extends AppCompatActivity {
         super.onSaveInstanceState(savedInstanceState);
     }
 
+    @Override
+    public void onMapLongClick(LatLng latLng) {
+        Toast.makeText(this, "Long Press", Toast.LENGTH_LONG).show();
+        showAlertDialogForPoint(latLng);
+    }
+
+    private void showAlertDialogForPoint(final LatLng point) {
+        // inflate message_item.xm view
+        View messageView = LayoutInflater.from(MapDemoActivity.this).inflate(R.layout.message_item, null);
+        // create alert dialog builder
+        AlertDialog.Builder alertDialogBuilder = new AlertDialog.Builder(this);
+        // set message_item.xml to AlertDialog builder
+        alertDialogBuilder.setView(messageView);
+
+        // create alert dialog
+        final AlertDialog alertDialog = alertDialogBuilder.create();
+
+        // configure dialog button (OK)
+        alertDialog.setButton(DialogInterface.BUTTON_POSITIVE, "OK", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int which) {
+                // define color of marker icon
+                BitmapDescriptor defaultMarker = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN);
+                // extract content from alert dialog
+                String title = ((EditText) alertDialog.findViewById(R.id.etTitle)).getText().toString();
+                String snippet = ((EditText) alertDialog.findViewById(R.id.etSnippet)).getText().toString();
+                // create and add marker to map
+                Marker marker = map.addMarker(new MarkerOptions()
+                    .position(point)
+                    .title(title)
+                    .snippet(snippet)
+                    .icon(defaultMarker));
+
+                // animate marker using drop effect
+                dropPinEffect(marker);
+            }
+        });
+
+        // configure dialog button (Cancel)
+        alertDialog.setButton(DialogInterface.BUTTON_NEGATIVE, "Cancel", new DialogInterface.OnClickListener() {
+            @Override
+            public void onClick(DialogInterface dialog, int id) {
+                dialog.cancel();
+            }
+        });
+
+        // display dialog
+        alertDialog.show();
+    }
+
     // Define a DialogFragment that displays the error dialog
     public static class ErrorDialogFragment extends android.support.v4.app.DialogFragment {
 
@@ -248,4 +326,57 @@ public class MapDemoActivity extends AppCompatActivity {
         }
     }
 
+    private void dropPinEffect(final Marker marker) {
+        // handler allows us to repeat a code block after a specified delay
+        final android.os.Handler handler = new android.os.Handler();
+        final long start = SystemClock.uptimeMillis();
+        final long duration = 1500;
+
+        // use the bounce interpolator
+        final android.view.animation.Interpolator interpolator = new BounceInterpolator();
+
+        // animate marker with a bounce updating its position every 15ms
+        handler.post(new Runnable() {
+            @Override
+            public void run() {
+                long elapsed = SystemClock.uptimeMillis() - start;
+                // calculate t for bounce based on elapsed time
+                float t = Math.max(1 - interpolator.getInterpolation((float) elapsed / duration), 0);
+                // set anchor
+                marker.setAnchor(0.5f, 1.0f + 14 * t);
+                if (t > 0.0) {
+                    // post this event again 15ms from now
+                    handler.postDelayed(this, 15);
+                } else {
+                    marker.showInfoWindow();
+                }
+            }
+        });
+    }
+
+    class CustomWindowAdapter implements GoogleMap.InfoWindowAdapter {
+        LayoutInflater mInflater;
+
+        public CustomWindowAdapter(LayoutInflater i) {
+            mInflater = i;
+        }
+
+        @Override
+        public View getInfoWindow(Marker marker) {
+            View v = mInflater.inflate(R.layout.custom_info_window, null);
+
+            TextView title = v.findViewById(R.id.tv_info_window_title);
+            title.setText(marker.getTitle());
+
+            TextView description = v.findViewById(R.id.tv_info_window_description);
+            description.setText(marker.getSnippet());
+
+            return v;
+        }
+
+        @Override
+        public View getInfoContents(Marker marker) {
+            return null;
+        }
+    }
 }
